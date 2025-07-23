@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Streaming Avatar - Caleb Weintraub</title>
+    
+    <!-- A-Frame and AR.js -->
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.min.js"></script>
+    
+    <!-- LiveKit Client -->
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            background: #000;
+        }
+
+        /* Control Panel Styles */
+        .control-panel {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            max-width: 300px;
+        }
+
+        .control-panel h3 {
+            margin-top: 0;
+            color: #00ffff;
+            text-shadow: 0 0 10px #00ffff;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #ccc;
+        }
+
+        .input-group input, .input-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 14px;
+        }
+
+        .input-group input::placeholder, .input-group textarea::placeholder {
+            color: #aaa;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #00ffff, #0080ff);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+            transform: scale(1.05);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 12px;
+        }
+
+        .status.connected {
+            background: rgba(0, 255, 0, 0.2);
+            border: 1px solid #00ff00;
+            color: #00ff00;
+        }
+
+        .status.disconnected {
+            background: rgba(255, 0, 0, 0.2);
+            border: 1px solid #ff0000;
+            color: #ff0000;
+        }
+
+        .status.connecting {
+            background: rgba(255, 255, 0, 0.2);
+            border: 1px solid #ffff00;
+            color: #ffff00;
+        }
+
+        /* Holographic Avatar Styles */
+        .holographic-container {
+            position: relative;
+            overflow: hidden;
+            backface-visibility: hidden;
+        }
+
+        .holographic-layer {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .specular-layer {
+            mix-blend-mode: color-dodge;
+            background-attachment: fixed;
+            background-image: linear-gradient(
+                180deg, 
+                transparent 20%, 
+                rgba(60, 94, 109, 0.3) 35%, 
+                rgba(244, 49, 14, 0.2) 50%,
+                rgba(245, 131, 8, 0.3) 80%, 
+                transparent
+            );
+            animation: holographic-pulse 3s ease-in-out infinite;
+        }
+
+        .interference-layer {
+            mix-blend-mode: screen;
+            background: repeating-linear-gradient(
+                90deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 255, 255, 0.03) 2px,
+                rgba(0, 255, 255, 0.03) 4px
+            );
+            animation: interference-scroll 0.1s linear infinite;
+        }
+
+        .glow-layer {
+            mix-blend-mode: soft-light;
+            background: radial-gradient(
+                ellipse at center,
+                rgba(0, 255, 255, 0.2) 0%,
+                rgba(0, 128, 255, 0.1) 50%,
+                transparent 100%
+            );
+            animation: glow-pulse 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes holographic-pulse {
+            0%, 100% { opacity: 0.7; transform: translateY(0px); }
+            50% { opacity: 1; transform: translateY(-2px); }
+        }
+
+        @keyframes interference-scroll {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(4px); }
+        }
+
+        @keyframes glow-pulse {
+            0% { opacity: 0.3; }
+            100% { opacity: 0.8; }
+        }
+
+        /* Avatar Video Processing Canvas */
+        #avatar-canvas {
+            display: none;
+        }
+
+        /* AR Scene Adjustments */
+        a-scene {
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Loading Overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            color: white;
+            font-size: 18px;
+        }
+
+        .loading-overlay.hidden {
+            display: none;
+        }
+
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #00ffff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-right: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Password Gate Styles */
+        .password-gate {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 3000;
+        }
+
+        .password-container {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 40px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .password-container h2 {
+            color: #00ffff;
+            text-shadow: 0 0 10px #00ffff;
+            margin-bottom: 10px;
+        }
+
+        .password-container p {
+            color: #ccc;
+            margin-bottom: 20px;
+        }
+
+        .password-container input {
+            width: 100%;
+            padding: 15px;
+            border: 1px solid rgba(0, 255, 255, 0.5);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 16px;
+            text-align: center;
+            margin-bottom: 20px;
+            outline: none;
+        }
+
+        .password-container input:focus {
+            border-color: #00ffff;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+        }
+
+        .password-error {
+            color: #ff4444;
+            margin-top: 10px;
+            font-size: 14px;
+            min-height: 20px;
+        }
+
+        .password-gate.hidden {
+            display: none;
+        }
+
+        .main-app {
+            display: none;
+        }
+
+        .main-app.visible {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <!-- Password Gate -->
+    <div id="password-gate" class="password-gate">
+        <div class="password-container">
+            <h2>🤖 AR Avatar Access</h2>
+            <p>Enter access code to continue</p>
+            <input type="password" id="password-input" placeholder="Access code" maxlength="20">
+            <button id="password-submit" class="btn">Enter</button>
+            <div id="password-error" class="password-error"></div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <div>Initializing AR Avatar...</div>
+    </div>
+
+    <!-- Main App Content (Hidden until password) -->
+    <div id="main-app" class="main-app">
+        <!-- Control Panel -->
+        <div class="control-panel">
+        <h3>🤖 Caleb AI Avatar</h3>
+        
+        <div id="status" class="status disconnected">
+            Disconnected
+        </div>
+
+        <div class="input-group">
+            <label for="api-token">HeyGen API Token:</label>
+            <input type="password" id="api-token" placeholder="Enter your HeyGen API token">
+        </div>
+
+        <button id="connect-btn" class="btn">Connect Avatar</button>
+        <button id="disconnect-btn" class="btn" disabled>Disconnect</button>
+
+        <div class="input-group">
+            <label for="message-input">Chat with Avatar:</label>
+            <textarea id="message-input" rows="3" placeholder="Ask me about AI, art, philosophy, or anything else..."></textarea>
+        </div>
+
+        <button id="send-message-btn" class="btn" disabled>Send Message</button>
+        <button id="voice-input-btn" class="btn" disabled>🎤 Voice Input</button>
+
+        <div class="input-group">
+            <label>Quick Prompts:</label>
+            <button class="btn" onclick="sendQuickMessage('Tell me about the intersection of AI and contemporary art')">AI & Art</button>
+            <button class="btn" onclick="sendQuickMessage('What are your thoughts on human-computer interaction?')">HCI</button>
+            <button class="btn" onclick="sendQuickMessage('Share a philosophical insight about creativity')">Philosophy</button>
+        </div>
+    </div>
+
+    <!-- Hidden Elements for Processing -->
+    <video id="avatar-video" autoplay muted style="display: none;"></video>
+    <canvas id="avatar-canvas" width="512" height="512"></canvas>
+
+    <!-- AR Scene -->
+    <a-scene 
+        embedded 
+        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+        vr-mode-ui="enabled: false">
+        
+        <!-- Assets -->
+        <a-assets>
+            <video id="avatar-texture" autoplay loop="true" muted="true"></video>
+        </a-assets>
+
+        <!-- Lighting -->
+        <a-light type="ambient" color="#404040"></a-light>
+        <a-light type="directional" position="2 4 5" color="#ffffff" intensity="0.5"></a-light>
+
+        <!-- Avatar Container -->
+        <a-marker preset="hiro" id="avatar-marker" marker-handler>
+            <!-- Floating Kiosk Platform -->
+            <a-entity id="avatar-platform" position="0 0.5 0" avatar-interactions holographic-shader>
+                <!-- Platform Base -->
+                <a-cylinder 
+                    radius="0.8" 
+                    height="0.1" 
+                    color="#1a1a2e" 
+                    metalness="0.8" 
+                    roughness="0.2"
+                    position="0 -0.05 0">
+                </a-cylinder>
+                
+                <!-- Avatar Display Panel -->
+                <a-entity id="avatar-display" position="0 1 0">
+                    <!-- Main Avatar Plane -->
+                    <a-plane 
+                        id="avatar-plane"
+                        width="1.2" 
+                        height="1.6" 
+                        material="src: #avatar-texture; transparent: true; alphaTest: 0.1"
+                        position="0 0 0.01">
+                    </a-plane>
+                    
+                    <!-- Holographic Effect Layers -->
+                    <a-plane 
+                        class="holographic-layer specular-layer"
+                        width="1.2" 
+                        height="1.6" 
+                        material="transparent: true; opacity: 0.3"
+                        position="0 0 0.02">
+                    </a-plane>
+                    
+                    <a-plane 
+                        class="holographic-layer interference-layer"
+                        width="1.2" 
+                        height="1.6" 
+                        material="transparent: true; opacity: 0.2"
+                        position="0 0 0.03">
+                    </a-plane>
+                    
+                    <!-- Frame Border -->
+                    <a-ring 
+                        radius-inner="0.9" 
+                        radius-outer="0.95" 
+                        color="#00ffff" 
+                        material="emissive: #00ffff; emissiveIntensity: 0.3"
+                        position="0 0 -0.01">
+                    </a-ring>
+                </a-entity>
+                
+                <!-- Floating UI Elements -->
+                <a-text 
+                    value="Caleb AI Avatar\nAsk me anything..."
+                    position="0 -0.3 0.1"
+                    align="center"
+                    color="#00ffff"
+                    font="kelsonsans"
+                    width="4"
+                    wrap-count="25">
+                </a-text>
+            </a-entity>
+        </a-marker>
+
+        <!-- AR Camera -->
+        <a-entity camera></a-entity>
+    </a-scene>
+    </div> <!-- End Main App -->
+
+    <script>
+        // Password protection
+        const ACCESS_CODE = 'avatar2025'; // Change this to your desired password
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            const passwordGate = document.getElementById('password-gate');
+            const passwordInput = document.getElementById('password-input');
+            const passwordSubmit = document.getElementById('password-submit');
+            const passwordError = document.getElementById('password-error');
+            const mainApp = document.getElementById('main-app');
+            
+            // Check if already authenticated
+            if (sessionStorage.getItem('avatar-authenticated') === 'true') {
+                showMainApp();
+            }
+            
+            function checkPassword() {
+                const entered = passwordInput.value.trim();
+                if (entered === ACCESS_CODE) {
+                    sessionStorage.setItem('avatar-authenticated', 'true');
+                    showMainApp();
+                } else {
+                    passwordError.textContent = 'Incorrect access code';
+                    passwordInput.value = '';
+                    passwordInput.focus();
+                }
+            }
+            
+            function showMainApp() {
+                passwordGate.classList.add('hidden');
+                mainApp.classList.add('visible');
+                // Load the avatar app
+                const script = document.createElement('script');
+                script.src = 'avatar-app.js';
+                document.body.appendChild(script);
+            }
+            
+            passwordSubmit.addEventListener('click', checkPassword);
+            passwordInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    checkPassword();
+                }
+            });
+            
+            // Focus on password input
+            passwordInput.focus();
+        });
+    </script>
+</body>
+</html> 

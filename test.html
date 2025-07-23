@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Avatar Compatibility Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: white;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #00ffff;
+            text-shadow: 0 0 10px #00ffff;
+            margin-bottom: 30px;
+        }
+        
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            border-left: 4px solid #00ffff;
+        }
+        
+        .test-result {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .pass {
+            background: rgba(0, 255, 0, 0.2);
+            border: 1px solid #00ff00;
+            color: #00ff00;
+        }
+        
+        .fail {
+            background: rgba(255, 0, 0, 0.2);
+            border: 1px solid #ff0000;
+            color: #ff0000;
+        }
+        
+        .warn {
+            background: rgba(255, 255, 0, 0.2);
+            border: 1px solid #ffff00;
+            color: #ffff00;
+        }
+        
+        .btn {
+            background: linear-gradient(45deg, #00ffff, #0080ff);
+            border: none;
+            color: white;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 10px 5px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+            transform: scale(1.05);
+        }
+        
+        #camera-test-video {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+        
+        .info-box {
+            background: rgba(0, 255, 255, 0.1);
+            border: 1px solid #00ffff;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        
+        .requirements {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .requirements li {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .requirements li:before {
+            content: "✓ ";
+            color: #00ff00;
+            font-weight: bold;
+        }
+
+        /* Password Gate Styles */
+        .password-gate {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 3000;
+        }
+
+        .password-container {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 40px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .password-container h2 {
+            color: #00ffff;
+            text-shadow: 0 0 10px #00ffff;
+            margin-bottom: 10px;
+        }
+
+        .password-container p {
+            color: #ccc;
+            margin-bottom: 20px;
+        }
+
+        .password-container input {
+            width: 100%;
+            padding: 15px;
+            border: 1px solid rgba(0, 255, 255, 0.5);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 16px;
+            text-align: center;
+            margin-bottom: 20px;
+            outline: none;
+        }
+
+        .password-container input:focus {
+            border-color: #00ffff;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+        }
+
+        .password-error {
+            color: #ff4444;
+            margin-top: 10px;
+            font-size: 14px;
+            min-height: 20px;
+        }
+
+        .password-gate.hidden {
+            display: none;
+        }
+
+        .main-content {
+            display: none;
+        }
+
+        .main-content.visible {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <!-- Password Gate -->
+    <div id="password-gate" class="password-gate">
+        <div class="password-container">
+            <h2>🤖 AR Avatar Access</h2>
+            <p>Enter access code for compatibility test</p>
+            <input type="password" id="password-input" placeholder="Access code" maxlength="20">
+            <button id="password-submit" class="btn">Enter</button>
+            <div id="password-error" class="password-error"></div>
+        </div>
+    </div>
+
+    <div id="main-content" class="main-content">
+    <div class="container">
+        <h1>🤖 AR Avatar Compatibility Test</h1>
+        
+        <div class="info-box">
+            <h3>Before You Begin</h3>
+            <p>This test checks if your device and browser support all features needed for the AR streaming avatar experience.</p>
+            <ul class="requirements">
+                <li>iOS 14.3+ or iPadOS 14.3+</li>
+                <li>Safari browser (required for AR.js)</li>
+                <li>Camera permission</li>
+                <li>Stable internet connection</li>
+                <li>HeyGen API token</li>
+            </ul>
+        </div>
+        
+        <div class="test-section">
+            <h3>🌐 Browser Compatibility</h3>
+            <p>Browser: <span id="browser-info"></span><span id="browser-result" class="test-result"></span></p>
+            <p>User Agent: <span id="user-agent"></span></p>
+            <p>Platform: <span id="platform-info"></span><span id="platform-result" class="test-result"></span></p>
+        </div>
+        
+        <div class="test-section">
+            <h3>📷 Camera Access</h3>
+            <p>Camera API: <span id="camera-api-result" class="test-result"></span></p>
+            <button id="test-camera-btn" class="btn">Test Camera Access</button>
+            <video id="camera-test-video" autoplay muted style="display: none;"></video>
+            <p id="camera-status"></p>
+        </div>
+        
+        <div class="test-section">
+            <h3>🎤 Voice Recognition</h3>
+            <p>Speech API: <span id="speech-api-result" class="test-result"></span></p>
+            <button id="test-speech-btn" class="btn" disabled>Test Voice Input</button>
+            <p id="speech-status"></p>
+        </div>
+        
+        <div class="test-section">
+            <h3>🌐 WebRTC Support</h3>
+            <p>WebRTC: <span id="webrtc-result" class="test-result"></span></p>
+            <p>MediaStream: <span id="mediastream-result" class="test-result"></span></p>
+        </div>
+        
+        <div class="test-section">
+            <h3>🎨 Canvas Processing</h3>
+            <p>Canvas 2D: <span id="canvas-result" class="test-result"></span></p>
+            <p>ImageData: <span id="imagedata-result" class="test-result"></span></p>
+            <button id="test-chroma-btn" class="btn">Test Chroma Key</button>
+            <canvas id="test-canvas" width="200" height="150" style="border: 1px solid #ccc; margin: 10px 0;"></canvas>
+        </div>
+        
+        <div class="test-section">
+            <h3>🔗 Network Connectivity</h3>
+            <p>Connection: <span id="network-result" class="test-result"></span></p>
+            <button id="test-heygen-btn" class="btn">Test HeyGen API Connection</button>
+            <input type="password" id="test-token" placeholder="Enter HeyGen API token for test" style="margin: 10px; padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+        </div>
+        
+        <div class="test-section">
+            <h3>📊 Overall Compatibility</h3>
+            <div id="overall-result">
+                <p>Run all tests above to see overall compatibility status.</p>
+            </div>
+            <button id="run-all-tests-btn" class="btn">Run All Tests</button>
+            <button id="launch-avatar-btn" class="btn" style="background: linear-gradient(45deg, #00ff00, #00aa00);" disabled>
+                Launch AR Avatar
+            </button>
+        </div>
+    </div>
+
+    <script>
+        class CompatibilityTest {
+            constructor() {
+                this.results = {};
+                this.init();
+            }
+            
+            init() {
+                this.checkBrowserInfo();
+                this.checkAPIs();
+                this.bindEvents();
+            }
+            
+            bindEvents() {
+                document.getElementById('test-camera-btn').addEventListener('click', () => this.testCamera());
+                document.getElementById('test-speech-btn').addEventListener('click', () => this.testSpeech());
+                document.getElementById('test-chroma-btn').addEventListener('click', () => this.testChromaKey());
+                document.getElementById('test-heygen-btn').addEventListener('click', () => this.testHeyGenAPI());
+                document.getElementById('run-all-tests-btn').addEventListener('click', () => this.runAllTests());
+                document.getElementById('launch-avatar-btn').addEventListener('click', () => this.launchAvatar());
+            }
+            
+            checkBrowserInfo() {
+                const browser = this.detectBrowser();
+                const platform = navigator.platform;
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                const isSafari = browser.includes('Safari');
+                
+                document.getElementById('browser-info').textContent = browser;
+                document.getElementById('user-agent').textContent = navigator.userAgent;
+                document.getElementById('platform-info').textContent = platform;
+                
+                const browserResult = document.getElementById('browser-result');
+                const platformResult = document.getElementById('platform-result');
+                
+                if (isIOS && isSafari) {
+                    browserResult.textContent = 'PASS';
+                    browserResult.className = 'test-result pass';
+                    this.results.browser = true;
+                } else if (isSafari) {
+                    browserResult.textContent = 'WARN';
+                    browserResult.className = 'test-result warn';
+                    this.results.browser = 'warn';
+                } else {
+                    browserResult.textContent = 'FAIL';
+                    browserResult.className = 'test-result fail';
+                    this.results.browser = false;
+                }
+                
+                if (isIOS) {
+                    platformResult.textContent = 'PASS';
+                    platformResult.className = 'test-result pass';
+                    this.results.platform = true;
+                } else {
+                    platformResult.textContent = 'WARN';
+                    platformResult.className = 'test-result warn';
+                    this.results.platform = 'warn';
+                }
+            }
+            
+            detectBrowser() {
+                const ua = navigator.userAgent;
+                if (ua.includes('Safari') && !ua.includes('Chrome')) return 'Safari';
+                if (ua.includes('Chrome')) return 'Chrome';
+                if (ua.includes('Firefox')) return 'Firefox';
+                if (ua.includes('Edge')) return 'Edge';
+                return 'Unknown';
+            }
+            
+            checkAPIs() {
+                // WebRTC
+                const hasWebRTC = !!(window.RTCPeerConnection || window.webkitRTCPeerConnection);
+                this.setResult('webrtc-result', hasWebRTC);
+                this.results.webrtc = hasWebRTC;
+                
+                // MediaStream
+                const hasMediaStream = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+                this.setResult('mediastream-result', hasMediaStream);
+                this.results.mediastream = hasMediaStream;
+                
+                // Speech Recognition
+                const hasSpeech = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+                this.setResult('speech-api-result', hasSpeech);
+                this.results.speech = hasSpeech;
+                if (hasSpeech) {
+                    document.getElementById('test-speech-btn').disabled = false;
+                }
+                
+                // Camera API
+                const hasCamera = hasMediaStream;
+                this.setResult('camera-api-result', hasCamera);
+                this.results.cameraAPI = hasCamera;
+                
+                // Canvas
+                const hasCanvas = !!(document.createElement('canvas').getContext);
+                this.setResult('canvas-result', hasCanvas);
+                this.results.canvas = hasCanvas;
+                
+                // ImageData
+                const hasImageData = hasCanvas && !!(CanvasRenderingContext2D.prototype.getImageData);
+                this.setResult('imagedata-result', hasImageData);
+                this.results.imagedata = hasImageData;
+                
+                // Network
+                const hasNetwork = navigator.onLine;
+                this.setResult('network-result', hasNetwork);
+                this.results.network = hasNetwork;
+            }
+            
+            setResult(elementId, passed) {
+                const element = document.getElementById(elementId);
+                if (passed) {
+                    element.textContent = 'PASS';
+                    element.className = 'test-result pass';
+                } else {
+                    element.textContent = 'FAIL';
+                    element.className = 'test-result fail';
+                }
+            }
+            
+            async testCamera() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    const video = document.getElementById('camera-test-video');
+                    video.srcObject = stream;
+                    video.style.display = 'block';
+                    document.getElementById('camera-status').textContent = '✅ Camera access granted!';
+                    this.results.cameraAccess = true;
+                    
+                    setTimeout(() => {
+                        stream.getTracks().forEach(track => track.stop());
+                        video.style.display = 'none';
+                    }, 3000);
+                } catch (error) {
+                    document.getElementById('camera-status').textContent = `❌ Camera access failed: ${error.message}`;
+                    this.results.cameraAccess = false;
+                }
+            }
+            
+            testSpeech() {
+                if (!window.SpeechRecognition && !window.webkitSpeechRecognition) return;
+                
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                const recognition = new SpeechRecognition();
+                
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript;
+                    document.getElementById('speech-status').textContent = `✅ Recognized: "${transcript}"`;
+                    this.results.speechTest = true;
+                };
+                
+                recognition.onerror = (event) => {
+                    document.getElementById('speech-status').textContent = `❌ Speech recognition failed: ${event.error}`;
+                    this.results.speechTest = false;
+                };
+                
+                recognition.start();
+                document.getElementById('speech-status').textContent = '🎤 Listening... say something!';
+            }
+            
+            testChromaKey() {
+                const canvas = document.getElementById('test-canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // Create a test image with green background
+                ctx.fillStyle = '#00FF00';
+                ctx.fillRect(0, 0, 200, 150);
+                ctx.fillStyle = '#FF0000';
+                ctx.fillRect(50, 50, 100, 50);
+                
+                // Process chroma key
+                const imageData = ctx.getImageData(0, 0, 200, 150);
+                const data = imageData.data;
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+                    
+                    if (g > 100 && g > r + 50 && g > b + 50) {
+                        data[i + 3] = 0; // Make transparent
+                    }
+                }
+                
+                ctx.putImageData(imageData, 0, 0);
+                this.results.chromaKey = true;
+            }
+            
+            async testHeyGenAPI() {
+                const token = document.getElementById('test-token').value.trim();
+                if (!token) {
+                    alert('Please enter your HeyGen API token');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch('https://api.heygen.com/v1/streaming.new', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            version: 'v2',
+                            avatar_id: 'c928ca11c4c54082a66f6693ec4b1b09'
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        document.getElementById('network-result').textContent = 'PASS';
+                        document.getElementById('network-result').className = 'test-result pass';
+                        this.results.heygenAPI = true;
+                    } else {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                } catch (error) {
+                    document.getElementById('network-result').textContent = 'FAIL';
+                    document.getElementById('network-result').className = 'test-result fail';
+                    this.results.heygenAPI = false;
+                    alert(`HeyGen API test failed: ${error.message}`);
+                }
+            }
+            
+            async runAllTests() {
+                await this.testCamera();
+                if (this.results.speech) this.testSpeech();
+                this.testChromaKey();
+                this.updateOverallResult();
+            }
+            
+            updateOverallResult() {
+                const resultDiv = document.getElementById('overall-result');
+                const launchBtn = document.getElementById('launch-avatar-btn');
+                
+                const criticalTests = ['webrtc', 'mediastream', 'canvas', 'network'];
+                const criticalPassed = criticalTests.every(test => this.results[test]);
+                
+                const warningTests = ['browser', 'platform'];
+                const hasWarnings = warningTests.some(test => this.results[test] === 'warn');
+                
+                if (criticalPassed && !hasWarnings) {
+                    resultDiv.innerHTML = '<p style="color: #00ff00;">✅ All tests passed! Your device is fully compatible.</p>';
+                    launchBtn.disabled = false;
+                } else if (criticalPassed) {
+                    resultDiv.innerHTML = '<p style="color: #ffff00;">⚠️ Core features work but some warnings detected. Should work with limitations.</p>';
+                    launchBtn.disabled = false;
+                } else {
+                    resultDiv.innerHTML = '<p style="color: #ff0000;">❌ Critical features missing. AR Avatar may not work properly.</p>';
+                    launchBtn.disabled = true;
+                }
+            }
+            
+            launchAvatar() {
+                window.location.href = 'index.html';
+            }
+        }
+        
+        // Initialize test when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check authentication first
+            if (sessionStorage.getItem('avatar-authenticated') === 'true') {
+                showMainContent();
+                new CompatibilityTest();
+            } else {
+                setupPasswordGate();
+            }
+        });
+        
+        function setupPasswordGate() {
+            const passwordGate = document.getElementById('password-gate');
+            const passwordInput = document.getElementById('password-input');
+            const passwordSubmit = document.getElementById('password-submit');
+            const passwordError = document.getElementById('password-error');
+            
+            function checkPassword() {
+                const entered = passwordInput.value.trim();
+                if (entered === 'avatar2025') { // Same password as main app
+                    sessionStorage.setItem('avatar-authenticated', 'true');
+                    showMainContent();
+                    new CompatibilityTest();
+                } else {
+                    passwordError.textContent = 'Incorrect access code';
+                    passwordInput.value = '';
+                    passwordInput.focus();
+                }
+            }
+            
+            function showMainContent() {
+                document.getElementById('password-gate').classList.add('hidden');
+                document.getElementById('main-content').classList.add('visible');
+            }
+            
+            passwordSubmit.addEventListener('click', checkPassword);
+            passwordInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    checkPassword();
+                }
+            });
+            
+            passwordInput.focus();
+        }
+    </script>
+    </div> <!-- End Main Content -->
+</body>
+</html> 

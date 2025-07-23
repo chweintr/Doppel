@@ -1,0 +1,67 @@
+{
+  "name": "ar-streaming-avatar",
+  "version": "1.0.0",
+  "description": "Interactive, real-time streaming AI avatar in AR using HeyGen and AR.js",
+  "main": "index.html",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "serve": "npx serve . -p 8000",
+    "dev": "npx serve . -p 8000 --ssl-cert cert.pem --ssl-key key.pem",
+    "build": "echo 'No build process required - static web app'",
+    "test": "echo 'Tests not implemented yet'"
+  },
+  "keywords": [
+    "ar",
+    "augmented-reality",
+    "avatar",
+    "ai",
+    "heygen",
+    "webrtc",
+    "streaming",
+    "ios",
+    "safari",
+    "aframe",
+    "arjs"
+  ],
+  "author": "Caleb Weintraub",
+  "license": "MIT",
+  "dependencies": {
+    "serve": "^14.2.1"
+  },
+  "devDependencies": {
+    "@types/aframe": "^1.2.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/calebweintraub/ar-streaming-avatar.git"
+  },
+  "bugs": {
+    "url": "https://github.com/calebweintraub/ar-streaming-avatar/issues"
+  },
+  "homepage": "https://github.com/calebweintraub/ar-streaming-avatar#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "browserslist": [
+    "iOS >= 14.3",
+    "Safari >= 14",
+    "Chrome >= 90",
+    "Firefox >= 85"
+  ],
+  "config": {
+    "heygen": {
+      "apiUrl": "https://api.heygen.com",
+      "avatarId": "c928ca11c4c54082a66f6693ec4b1b09",
+      "quality": "high"
+    },
+    "ar": {
+      "markerType": "hiro",
+      "trackingMethod": "marker"
+    },
+    "performance": {
+      "targetFPS": 30,
+      "chromaKeyProcessing": true,
+      "holographicEffects": true
+    }
+  }
+} 
