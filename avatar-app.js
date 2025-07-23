@@ -167,7 +167,7 @@ class ARAvatarApp {
                 "x-api-key": this.config.token
             },
             body: JSON.stringify({
-                session_id: this.session.sessionInfo.sessionId
+                session_id: this.session.sessionInfo.session_id
             })
         });
         
@@ -184,7 +184,7 @@ class ARAvatarApp {
                 "x-api-key": this.config.token
             },
             body: JSON.stringify({
-                session_id: this.session.sessionInfo.sessionId,
+                session_id: this.session.sessionInfo.session_id,
                 paid: true
             })
         });
@@ -249,12 +249,12 @@ class ARAvatarApp {
         // Prepare connection first, then connect
         await this.session.room.prepareConnection(
             this.session.sessionInfo.url,
-            this.session.sessionInfo.accessToken
+            this.session.sessionInfo.access_token
         );
         
         await this.session.room.connect(
             this.session.sessionInfo.url,
-            this.session.sessionInfo.accessToken
+            this.session.sessionInfo.access_token
         );
     }
     
@@ -327,7 +327,7 @@ class ARAvatarApp {
                 "x-api-key": this.config.token
             },
             body: JSON.stringify({
-                session_id: this.session.sessionInfo.sessionId,
+                session_id: this.session.sessionInfo.session_id,
                 text: text,
                 task_type: "talk"
             })
@@ -401,7 +401,7 @@ class ARAvatarApp {
                         "x-api-key": this.config.token
                     },
                     body: JSON.stringify({
-                        session_id: this.session.sessionInfo.sessionId
+                        session_id: this.session.sessionInfo.session_id
                     })
                 });
             }
