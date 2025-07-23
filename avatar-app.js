@@ -13,7 +13,9 @@ class ARAvatarApp {
         
         this.session = {
             sessionInfo: null,
+            sessionToken: null,
             room: null,
+            mediaStream: null,
             isConnected: false,
             isStreaming: false
         };
@@ -64,11 +66,8 @@ class ARAvatarApp {
             localStorage.setItem('heygen-token', e.target.value);
         });
         
-        // Load saved token
-        const savedToken = localStorage.getItem('heygen-token');
-        if (savedToken) {
-            this.elements.apiTokenInput.value = savedToken;
-        }
+        // Pre-fill API token (password-protected access)
+        this.elements.apiTokenInput.value = 'MjNlM2Q1ZmVkY2E2NDNmOGIxYzMzMDgzYzNhZmYyZTQtMTczMDU4NDk0Nw==';
     }
     
     showLoading(message = 'Loading...') {
@@ -111,6 +110,9 @@ class ARAvatarApp {
             this.updateUI(true);
             this.hideLoading();
             
+            // Now activate AR scene
+            this.activateARScene();
+            
             console.log('Successfully connected to avatar stream');
             
         } catch (error) {
@@ -122,18 +124,27 @@ class ARAvatarApp {
     }
     
     async createSession() {
-        const response = await fetch(`${this.config.serverUrl}/v1/streaming.new`, {
+        // Create session first (correct official flow)
+        const response = await fetch(`${this.config.serverUrl}/v1/realtime.new`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${this.config.token}`
+                "x-api-key": this.config.token
             },
             body: JSON.stringify({
+                avatarName: this.config.avatarId,
+                shareCode: null,
+                knowledgeBaseId: "demo-1", // Default knowledge base
+                voice: {
+                    voiceId: "default"
+                },
                 version: "v2",
-                avatar_id: this.config.avatarId,
+                waitList: false,
+                videoEncoding: "H264",
                 quality: "high",
-                background: "#00FF00", // Green screen for chroma key
-                voice_id: "default"
+                source: "share",
+                language: "en",
+                iaIsLivekitTransport: true
             })
         });
         
@@ -142,50 +153,86 @@ class ARAvatarApp {
             throw new Error(error.message || 'Failed to create session');
         }
         
-        this.session.sessionInfo = await response.json();
+        const sessionData = await response.json();
+        this.session.sessionInfo = sessionData.data;
         console.log('Session created:', this.session.sessionInfo);
     }
     
     async startStream() {
-        const response = await fetch(`${this.config.serverUrl}/v1/streaming.start`, {
+        // Start the session
+        const startResponse = await fetch(`${this.config.serverUrl}/v1/realtime.start`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${this.config.token}`
+                "x-api-key": this.config.token
             },
             body: JSON.stringify({
-                session_id: this.session.sessionInfo.session_id
+                session_id: this.session.sessionInfo.sessionId
             })
         });
         
-        if (!response.ok) {
-            const error = await response.json();
+        if (!startResponse.ok) {
+            const error = await startResponse.json();
             throw new Error(error.message || 'Failed to start stream');
         }
         
-        console.log('Stream started');
+        // Create session token after starting
+        const tokenResponse = await fetch(`${this.config.serverUrl}/v1/streaming.create_token`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "x-api-key": this.config.token
+            },
+            body: JSON.stringify({
+                session_id: this.session.sessionInfo.sessionId,
+                paid: true
+            })
+        });
+        
+        if (!tokenResponse.ok) {
+            throw new Error('Failed to get session token');
+        }
+        
+        const tokenData = await tokenResponse.json();
+        this.session.sessionToken = tokenData.data.token;
+        
+        console.log('Stream started with token');
     }
     
     async connectToRoom() {
-        this.session.room = new LiveKitClient.Room();
+        // Create LiveKit room with proper configuration
+        this.session.room = new LiveKitClient.Room({
+            adaptiveStream: true,
+            dynacast: true,
+            videoCaptureDefaults: {
+                resolution: LiveKitClient.VideoPresets.h720.resolution,
+            },
+        });
+        
+        // Create media stream for avatar video
+        this.session.mediaStream = new MediaStream();
         
         // Set up event handlers
         this.session.room.on(LiveKitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
             console.log('Track subscribed:', track.kind);
             
-            if (track.kind === LiveKitClient.Track.Kind.Video) {
-                console.log('Video track received');
-                const mediaStream = new MediaStream([track.mediaStreamTrack]);
-                this.elements.avatarVideo.srcObject = mediaStream;
-                this.setupChromaKey();
+            if (track.kind === LiveKitClient.Track.Kind.Video || track.kind === LiveKitClient.Track.Kind.Audio) {
+                this.session.mediaStream.addTrack(track.mediaStreamTrack);
+                
+                // Only set up video processing when we have both video and audio
+                if (this.session.mediaStream.getVideoTracks().length > 0 && 
+                    this.session.mediaStream.getAudioTracks().length > 0) {
+                    this.elements.avatarVideo.srcObject = this.session.mediaStream;
+                    this.setupChromaKey();
+                    console.log('Media stream ready');
+                }
             }
-            
-            if (track.kind === LiveKitClient.Track.Kind.Audio) {
-                console.log('Audio track received');
-                const mediaStream = new MediaStream([track.mediaStreamTrack]);
-                const audioElement = new Audio();
-                audioElement.srcObject = mediaStream;
-                audioElement.play();
+        });
+        
+        this.session.room.on(LiveKitClient.RoomEvent.TrackUnsubscribed, (track) => {
+            const mediaTrack = track.mediaStreamTrack;
+            if (mediaTrack && this.session.mediaStream) {
+                this.session.mediaStream.removeTrack(mediaTrack);
             }
         });
         
@@ -194,15 +241,20 @@ class ARAvatarApp {
             this.session.isStreaming = true;
         });
         
-        this.session.room.on(LiveKitClient.RoomEvent.Disconnected, () => {
-            console.log('Disconnected from LiveKit room');
+        this.session.room.on(LiveKitClient.RoomEvent.Disconnected, (reason) => {
+            console.log('Disconnected from LiveKit room:', reason);
             this.session.isStreaming = false;
         });
         
-        // Connect to the room
+        // Prepare connection first, then connect
+        await this.session.room.prepareConnection(
+            this.session.sessionInfo.url,
+            this.session.sessionInfo.accessToken
+        );
+        
         await this.session.room.connect(
             this.session.sessionInfo.url,
-            this.session.sessionInfo.access_token
+            this.session.sessionInfo.accessToken
         );
     }
     
@@ -272,10 +324,10 @@ class ARAvatarApp {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${this.config.token}`
+                "x-api-key": this.config.token
             },
             body: JSON.stringify({
-                session_id: this.session.sessionInfo.session_id,
+                session_id: this.session.sessionInfo.sessionId,
                 text: text,
                 task_type: "talk"
             })
@@ -342,14 +394,14 @@ class ARAvatarApp {
             }
             
             if (this.session.sessionInfo) {
-                await fetch(`${this.config.serverUrl}/v1/streaming.stop`, {
+                await fetch(`${this.config.serverUrl}/v1/realtime.stop`, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
-                        "Authorization": `Bearer ${this.config.token}`
+                        "x-api-key": this.config.token
                     },
                     body: JSON.stringify({
-                        session_id: this.session.sessionInfo.session_id
+                        session_id: this.session.sessionInfo.sessionId
                     })
                 });
             }
@@ -377,6 +429,23 @@ class ARAvatarApp {
         this.elements.disconnectBtn.disabled = !connected;
         this.elements.sendMessageBtn.disabled = !connected;
         this.elements.voiceInputBtn.disabled = !connected;
+    }
+    
+    activateARScene() {
+        const arScene = document.getElementById('ar-scene');
+        if (arScene) {
+            arScene.style.display = 'block';
+            
+            // Update AR.js to use webcam now that avatar is connected
+            arScene.setAttribute('arjs', {
+                sourceType: 'webcam',
+                debugUIEnabled: false,
+                detectionMode: 'mono_and_matrix',
+                matrixCodeType: '3x3'
+            });
+            
+            console.log('AR scene activated with camera access');
+        }
     }
 }
 

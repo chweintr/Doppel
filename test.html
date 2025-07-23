@@ -392,7 +392,11 @@
             
             async testCamera() {
                 try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { 
+                            facingMode: 'environment' // Use rear camera for AR
+                        } 
+                    });
                     const video = document.getElementById('camera-test-video');
                     video.srcObject = stream;
                     video.style.display = 'block';

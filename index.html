@@ -331,12 +331,12 @@
             Disconnected
         </div>
 
-        <div class="input-group">
+        <div class="input-group" style="display: none;">
             <label for="api-token">HeyGen API Token:</label>
-            <input type="password" id="api-token" placeholder="Enter your HeyGen API token">
+            <input type="password" id="api-token" placeholder="Enter your HeyGen API token" value="MjNlM2Q1ZmVkY2E2NDNmOGIxYzMzMDgzYzNhZmYyZTQtMTczMDU4NDk0Nw==">
         </div>
 
-        <button id="connect-btn" class="btn">Connect Avatar</button>
+        <button id="connect-btn" class="btn">🚀 Connect Caleb's Avatar</button>
         <button id="disconnect-btn" class="btn" disabled>Disconnect</button>
 
         <div class="input-group">
@@ -361,9 +361,11 @@
 
     <!-- AR Scene -->
     <a-scene 
+        id="ar-scene"
         embedded 
-        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
-        vr-mode-ui="enabled: false">
+        arjs="sourceType: none; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+        vr-mode-ui="enabled: false"
+        style="display: none;">
         
         <!-- Assets -->
         <a-assets>
