@@ -34,6 +34,11 @@ class ARAvatarApp {
             loadingOverlay: document.getElementById('loading-overlay')
         };
         
+        this.audioLevels = {
+            microphone: 0,
+            avatar: 0
+        };
+        
         this.recognition = null;
         this.isListening = false;
         
@@ -43,6 +48,7 @@ class ARAvatarApp {
     init() {
         this.bindEvents();
         this.setupSpeechRecognition();
+        this.setupCleanup();
         this.hideLoading();
         console.log('AR Avatar App initialized');
     }
@@ -84,6 +90,38 @@ class ARAvatarApp {
         this.elements.status.className = `status ${className}`;
     }
     
+    // Monitor audio levels for visual feedback
+    startAudioMonitoring() {
+        if (!this.microphoneStream) return;
+        
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const analyser = audioContext.createAnalyser();
+        const microphone = audioContext.createMediaStreamSource(this.microphoneStream);
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        
+        microphone.connect(analyser);
+        analyser.fftSize = 256;
+        
+        const checkLevel = () => {
+            analyser.getByteFrequencyData(dataArray);
+            const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+            
+            // Update microphone activity indicator
+            if (average > 5) {
+                this.elements.status.textContent = `Connected 🎤 Speaking (${Math.round(average)})`;
+            } else {
+                this.elements.status.textContent = 'Connected 🎤 Listening';
+            }
+            
+            if (this.session.isConnected) {
+                requestAnimationFrame(checkLevel);
+            }
+        };
+        
+        checkLevel();
+        console.log('Audio monitoring started');
+    }
+    
     async connect() {
         const token = this.elements.apiTokenInput.value.trim();
         if (!token) {
@@ -110,10 +148,15 @@ class ARAvatarApp {
             this.updateUI(true);
             this.hideLoading();
             
+            // Start audio monitoring for voice activity
+            this.startAudioMonitoring();
+            
             // Now activate AR scene
             this.activateARScene();
             
             console.log('Successfully connected to avatar stream');
+            console.log('Avatar ID:', this.config.avatarId);
+            console.log('Session Info:', this.session.sessionInfo);
             
         } catch (error) {
             console.error('Connection failed:', error);
@@ -132,19 +175,12 @@ class ARAvatarApp {
                 "x-api-key": this.config.token
             },
             body: JSON.stringify({
-                avatarName: this.config.avatarId,
-                shareCode: null,
-                knowledgeBaseId: "demo-1", // Default knowledge base
+                avatar_id: this.config.avatarId,
                 voice: {
-                    voiceId: "default"
+                    voice_id: "3da51ff105b54d559eda2815af07177a"
                 },
-                version: "v2",
-                waitList: false,
-                videoEncoding: "H264",
-                quality: "high",
-                source: "share",
-                language: "en",
-                iaIsLivekitTransport: true
+                knowledge_base_id: "0091aee50f12487f8467821042177874",
+                quality: "high"
             })
         });
         
@@ -155,7 +191,14 @@ class ARAvatarApp {
         
         const sessionData = await response.json();
         this.session.sessionInfo = sessionData.data;
-        console.log('Session created:', this.session.sessionInfo);
+        console.log('Session created successfully!');
+        console.log('Avatar ID used:', this.config.avatarId);
+        console.log('Session details:', this.session.sessionInfo);
+        
+        // Check if we're getting the right avatar
+        if (sessionData.data.avatar_id && sessionData.data.avatar_id !== this.config.avatarId) {
+            console.warn('Avatar ID mismatch! Requested:', this.config.avatarId, 'Got:', sessionData.data.avatar_id);
+        }
     }
     
     async startStream() {
@@ -200,32 +243,72 @@ class ARAvatarApp {
     }
     
     async connectToRoom() {
-        // Create LiveKit room with proper configuration
+        // Check if LiveKitClient is available
+        if (typeof LiveKitClient === 'undefined') {
+            throw new Error('LiveKitClient is not available. Please ensure the LiveKit SDK is loaded.');
+        }
+        
+        // Request microphone permission first
+        try {
+            const micStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                } 
+            });
+            console.log('Microphone access granted');
+            this.microphoneStream = micStream;
+        } catch (error) {
+            console.error('Microphone access denied:', error);
+            alert('Microphone access is required for voice interaction with the avatar');
+        }
+        
+        // Create LiveKit room with proper audio configuration
         this.session.room = new LiveKitClient.Room({
             adaptiveStream: true,
             dynacast: true,
+            audioCaptureDefaults: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+            },
             videoCaptureDefaults: {
                 resolution: LiveKitClient.VideoPresets.h720.resolution,
             },
         });
         
-        // Create media stream for avatar video
+        // Create media stream for avatar video with audio
         this.session.mediaStream = new MediaStream();
         
         // Set up event handlers
         this.session.room.on(LiveKitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
-            console.log('Track subscribed:', track.kind);
+            console.log('Track subscribed:', track.kind, 'from participant:', participant.identity);
             
-            if (track.kind === LiveKitClient.Track.Kind.Video || track.kind === LiveKitClient.Track.Kind.Audio) {
+            if (track.kind === LiveKitClient.Track.Kind.Video) {
                 this.session.mediaStream.addTrack(track.mediaStreamTrack);
-                
-                // Only set up video processing when we have both video and audio
-                if (this.session.mediaStream.getVideoTracks().length > 0 && 
-                    this.session.mediaStream.getAudioTracks().length > 0) {
-                    this.elements.avatarVideo.srcObject = this.session.mediaStream;
-                    this.setupChromaKey();
-                    console.log('Media stream ready');
+                this.elements.avatarVideo.srcObject = this.session.mediaStream;
+                // Enable audio output
+                this.elements.avatarVideo.muted = false;
+                this.elements.avatarVideo.volume = 1.0;
+                this.setupChromaKey();
+                console.log('Video track connected');
+            }
+            
+            if (track.kind === LiveKitClient.Track.Kind.Audio) {
+                // Create separate audio element for avatar speech
+                let avatarAudio = document.getElementById('avatar-audio');
+                if (!avatarAudio) {
+                    avatarAudio = document.createElement('audio');
+                    avatarAudio.id = 'avatar-audio';
+                    avatarAudio.autoplay = true;
+                    avatarAudio.volume = 1.0;
+                    document.body.appendChild(avatarAudio);
                 }
+                
+                const audioStream = new MediaStream([track.mediaStreamTrack]);
+                avatarAudio.srcObject = audioStream;
+                console.log('Audio track connected - you should hear the avatar now');
             }
         });
         
@@ -256,6 +339,28 @@ class ARAvatarApp {
             this.session.sessionInfo.url,
             this.session.sessionInfo.access_token
         );
+        
+        // Publish microphone audio so avatar can hear you
+        if (this.microphoneStream) {
+            try {
+                await this.session.room.localParticipant.enableCameraAndMicrophone();
+                console.log('Microphone published - avatar can now hear you');
+            } catch (error) {
+                console.error('Failed to publish microphone:', error);
+                // Try alternative method
+                try {
+                    const audioTrack = await LiveKitClient.createLocalAudioTrack({
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                    });
+                    await this.session.room.localParticipant.publishTrack(audioTrack);
+                    console.log('Microphone published via alternative method');
+                } catch (altError) {
+                    console.error('Alternative microphone publish failed:', altError);
+                }
+            }
+        }
     }
     
     setupChromaKey() {
@@ -389,6 +494,20 @@ class ARAvatarApp {
     
     async disconnect() {
         try {
+            // Stop microphone stream
+            if (this.microphoneStream) {
+                this.microphoneStream.getTracks().forEach(track => track.stop());
+                this.microphoneStream = null;
+            }
+            
+            // Clean up avatar audio element
+            const avatarAudio = document.getElementById('avatar-audio');
+            if (avatarAudio) {
+                avatarAudio.pause();
+                avatarAudio.srcObject = null;
+                avatarAudio.remove();
+            }
+            
             if (this.session.room) {
                 await this.session.room.disconnect();
             }
@@ -446,6 +565,27 @@ class ARAvatarApp {
             
             console.log('AR scene activated with camera access');
         }
+    }
+    
+    // Add better cleanup for session management
+    setupCleanup() {
+        // Auto-cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (this.session.isConnected) {
+                // Quick cleanup attempt
+                navigator.sendBeacon(`${this.config.serverUrl}/v1/realtime.stop`, 
+                    JSON.stringify({
+                        session_id: this.session.sessionInfo?.session_id
+                    }));
+            }
+        });
+        
+        // Cleanup on visibility change (tab switching)
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && this.session.isConnected) {
+                this.disconnect();
+            }
+        });
     }
 }
 

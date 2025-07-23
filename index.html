@@ -474,13 +474,59 @@
                 }
             }
             
-            function showMainApp() {
+            async function showMainApp() {
                 passwordGate.classList.add('hidden');
                 mainApp.classList.add('visible');
-                // Load the avatar app
-                const script = document.createElement('script');
-                script.src = 'avatar-app.js';
-                document.body.appendChild(script);
+                
+                // Wait for LiveKitClient to be available before loading avatar app
+                try {
+                    await waitForLiveKitClient();
+                    // Load the avatar app
+                    const script = document.createElement('script');
+                    script.src = 'avatar-app.js';
+                    document.body.appendChild(script);
+                } catch (error) {
+                    console.error('Failed to load LiveKit SDK:', error);
+                    alert('Failed to load LiveKit SDK. Please refresh the page and try again.');
+                }
+            }
+            
+            // Wait for LiveKitClient to be available
+            function waitForLiveKitClient() {
+                return new Promise((resolve, reject) => {
+                    if (typeof LiveKitClient !== 'undefined') {
+                        resolve();
+                        return;
+                    }
+                    
+                    // Check for LivekitClient with lowercase 'k' (actual library export)
+                    if (typeof LivekitClient !== 'undefined') {
+                        console.log('LivekitClient found - fixing global reference');
+                        window.LiveKitClient = window.LivekitClient;
+                        resolve();
+                        return;
+                    }
+                    
+                    let attempts = 0;
+                    const maxAttempts = 50; // 5 seconds max wait
+                    
+                    const check = () => {
+                        attempts++;
+                        if (typeof LiveKitClient !== 'undefined') {
+                            resolve();
+                        } else if (typeof LivekitClient !== 'undefined') {
+                            console.log('LivekitClient (lowercase k) found - fixing global reference');
+                            window.LiveKitClient = window.LivekitClient;
+                            resolve();
+                        } else if (attempts >= maxAttempts) {
+                            reject(new Error('LiveKitClient failed to load'));
+                        } else {
+                            setTimeout(check, 100);
+                        }
+                    };
+                    
+                    check();
+                });
             }
             
             passwordSubmit.addEventListener('click', checkPassword);

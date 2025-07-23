@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Desktop Avatar Test - Caleb Weintraub</title>
+    
+    <!-- LiveKit Client with multiple fallbacks -->
+    <script>
+        // Dynamic script loading with multiple CDN fallbacks
+        function loadLiveKitScript() {
+            const sources = [
+                'https://cdn.jsdelivr.net/npm/livekit-client@2.15.3/dist/livekit-client.umd.min.js',
+                'https://unpkg.com/livekit-client@2.15.3/dist/livekit-client.umd.min.js',
+                'https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js',
+                'https://unpkg.com/livekit-client/dist/livekit-client.umd.min.js'
+            ];
+            
+            let currentIndex = 0;
+            
+            function tryLoadScript() {
+                if (currentIndex >= sources.length) {
+                    console.error('All LiveKit CDN sources failed');
+                    return;
+                }
+                
+                const script = document.createElement('script');
+                script.src = sources[currentIndex];
+                script.id = 'livekit-script-' + currentIndex;
+                
+                script.onload = function() {
+                    console.log('LiveKit loaded successfully from:', sources[currentIndex]);
+                    // Sometimes the global is exposed differently - check multiple variants
+                    if (typeof window.LiveKitClient === 'undefined') {
+                        if (typeof window.LivekitClient !== 'undefined') {
+                            console.log('Fixing global: LivekitClient -> LiveKitClient');
+                            window.LiveKitClient = window.LivekitClient;
+                        } else if (typeof window.livekit !== 'undefined') {
+                            console.log('Fixing global: livekit -> LiveKitClient');
+                            window.LiveKitClient = window.livekit;
+                        }
+                    }
+                };
+                
+                script.onerror = function() {
+                    console.warn('Failed to load from:', sources[currentIndex]);
+                    currentIndex++;
+                    tryLoadScript();
+                };
+                
+                document.head.appendChild(script);
+            }
+            
+            tryLoadScript();
+        }
+        
+        // Start loading immediately
+        loadLiveKitScript();
+    </script>
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .control-panel {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            margin-bottom: 20px;
+        }
+
+        .control-panel h3 {
+            margin-top: 0;
+            color: #00ffff;
+            text-shadow: 0 0 10px #00ffff;
+        }
+
+        .video-container {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .avatar-video {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+            border-radius: 10px;
+            border: 2px solid #00ffff;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #00ffff, #0080ff);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+            transform: scale(1.05);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+
+        .status.connected {
+            background: rgba(0, 255, 0, 0.2);
+            border: 1px solid #00ff00;
+            color: #00ff00;
+        }
+
+        .status.disconnected {
+            background: rgba(255, 0, 0, 0.2);
+            border: 1px solid #ff0000;
+            color: #ff0000;
+        }
+
+        .status.connecting {
+            background: rgba(255, 255, 0, 0.2);
+            border: 1px solid #ffff00;
+            color: #ffff00;
+        }
+
+        .chat-area {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        .chat-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Desktop Avatar Test - No AR</h1>
+        
+        <div class="control-panel">
+            <h3>Connection Status</h3>
+            <div id="status" class="status disconnected">Disconnected</div>
+            <button id="connect-btn" class="btn">🚀 Connect Caleb's Avatar</button>
+            <button id="disconnect-btn" class="btn" disabled>Disconnect</button>
+            <button id="enable-audio-btn" class="btn" onclick="window.desktopAvatarApp?.enableAudio()" style="display:none;">🔊 Enable Audio</button>
+        </div>
+
+        <div class="video-container">
+            <h3>Avatar Video Stream</h3>
+            <video id="avatar-video" class="avatar-video" autoplay>
+                <p>Video will appear here when connected</p>
+            </video>
+        </div>
+
+        <div class="chat-area">
+            <h3>Chat with Avatar</h3>
+            <textarea id="message-input" class="chat-input" rows="3" placeholder="Type your message to Caleb..."></textarea>
+            <button id="send-message-btn" class="btn" disabled>Send Message</button>
+            <button id="voice-input-btn" class="btn" disabled>🎤 Voice Input</button>
+        </div>
+    </div>
+
+    <script>
+        // Wait for LiveKitClient to be available
+        function waitForLiveKitClient() {
+            return new Promise((resolve, reject) => {
+                // Check multiple possible global names (including LivekitClient with lowercase 'k')
+                if (typeof LiveKitClient !== 'undefined') {
+                    console.log('LiveKitClient found in global scope');
+                    resolve();
+                    return;
+                }
+                
+                // Check for LivekitClient with lowercase 'k' (seems to be what the library actually exports)
+                if (typeof LivekitClient !== 'undefined') {
+                    console.log('LivekitClient found in global scope - fixing global reference');
+                    window.LiveKitClient = window.LivekitClient;
+                    resolve();
+                    return;
+                }
+                
+                // Sometimes it might be under window.LiveKitClient
+                if (typeof window.LiveKitClient !== 'undefined') {
+                    console.log('LiveKitClient found under window.LiveKitClient');
+                    resolve();
+                    return;
+                }
+                
+                // Check for window.LivekitClient with lowercase 'k'
+                if (typeof window.LivekitClient !== 'undefined') {
+                    console.log('window.LivekitClient found - fixing global reference');
+                    window.LiveKitClient = window.LivekitClient;
+                    resolve();
+                    return;
+                }
+                
+                let attempts = 0;
+                const maxAttempts = 100; // 10 seconds max wait
+                
+                const check = () => {
+                    attempts++;
+                    console.log(`Attempt ${attempts}: Checking for LiveKitClient...`);
+                    
+                    // Debug: List all global objects that might be LiveKit related
+                    if (attempts === 1) {
+                        const globals = Object.keys(window).filter(key => 
+                            key.toLowerCase().includes('livekit') || 
+                            key.toLowerCase().includes('lk') ||
+                            key.toLowerCase().includes('room')
+                        );
+                        console.log('LiveKit-related globals found:', globals);
+                    }
+                    
+                    if (typeof LiveKitClient !== 'undefined') {
+                        console.log('LiveKitClient is now available!');
+                        resolve();
+                    } else if (typeof LivekitClient !== 'undefined') {
+                        console.log('LivekitClient (lowercase k) is now available! Fixing global reference...');
+                        window.LiveKitClient = window.LivekitClient;
+                        resolve();
+                    } else if (typeof window.LiveKitClient !== 'undefined') {
+                        console.log('window.LiveKitClient is now available!');
+                        resolve();
+                    } else if (typeof window.LivekitClient !== 'undefined') {
+                        console.log('window.LivekitClient (lowercase k) is now available! Fixing global reference...');
+                        window.LiveKitClient = window.LivekitClient;
+                        resolve();
+                    } else if (attempts >= maxAttempts) {
+                        console.error('Available globals:', Object.keys(window).slice(0, 20));
+                        reject(new Error('LiveKitClient failed to load after ' + attempts + ' attempts'));
+                    } else {
+                        setTimeout(check, 100);
+                    }
+                };
+                
+                check();
+            });
+        }
+
+        // Use the same avatar app logic but without AR components
+        class DesktopAvatarApp {
+            constructor() {
+                this.config = {
+                    serverUrl: "https://api.heygen.com",
+                    avatarId: "c928ca11c4c54082a66f6693ec4b1b09",
+                    token: "MjNlM2Q1ZmVkY2E2NDNmOGIxYzMzMDgzYzNhZmYyZTQtMTczMDU4NDk0Nw=="
+                };
+                
+                this.session = {
+                    sessionInfo: null,
+                    sessionToken: null,
+                    room: null,
+                    mediaStream: null,
+                    isConnected: false,
+                    isStreaming: false
+                };
+                
+                this.elements = {
+                    status: document.getElementById('status'),
+                    connectBtn: document.getElementById('connect-btn'),
+                    disconnectBtn: document.getElementById('disconnect-btn'),
+                    messageInput: document.getElementById('message-input'),
+                    sendMessageBtn: document.getElementById('send-message-btn'),
+                    voiceInputBtn: document.getElementById('voice-input-btn'),
+                    avatarVideo: document.getElementById('avatar-video')
+                };
+                
+                this.init();
+            }
+            
+            init() {
+                this.bindEvents();
+                console.log('Desktop Avatar App initialized - No AR');
+            }
+            
+            bindEvents() {
+                this.elements.connectBtn.addEventListener('click', () => this.connect());
+                this.elements.disconnectBtn.addEventListener('click', () => this.disconnect());
+                this.elements.sendMessageBtn.addEventListener('click', () => this.sendMessage());
+                
+                this.elements.messageInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.sendMessage();
+                    }
+                });
+                
+                // Enable audio on any user interaction
+                document.addEventListener('click', () => this.enableAudio(), { once: true });
+                document.addEventListener('touchstart', () => this.enableAudio(), { once: true });
+            }
+            
+            updateStatus(status, className) {
+                this.elements.status.textContent = status;
+                this.elements.status.className = `status ${className}`;
+            }
+            
+            async connect() {
+                this.updateStatus('Connecting...', 'connecting');
+                
+                try {
+                    // Ensure LiveKitClient is available
+                    await waitForLiveKitClient();
+                    
+                    await this.createSession();
+                    await this.startStream();
+                    await this.connectToRoom();
+                    
+                    this.session.isConnected = true;
+                    this.updateStatus('Connected 🎤 Ready', 'connected');
+                    this.updateUI(true);
+                    
+                    console.log('Successfully connected to avatar stream');
+                    console.log('Avatar ID:', this.config.avatarId);
+                    console.log('Session Info:', this.session.sessionInfo);
+                    
+                } catch (error) {
+                    console.error('Connection failed:', error);
+                    this.updateStatus('Connection failed', 'disconnected');
+                    alert(`Connection failed: ${error.message}`);
+                }
+            }
+            
+            async createSession() {
+                const response = await fetch(`${this.config.serverUrl}/v1/realtime.new`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "x-api-key": this.config.token
+                    },
+                    body: JSON.stringify({
+                        avatar_id: this.config.avatarId,
+                        voice: {
+                            voice_id: "3da51ff105b54d559eda2815af07177a"
+                        },
+                        knowledge_base_id: "0091aee50f12487f8467821042177874",
+                        quality: "high"
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to create session');
+                }
+                
+                const sessionData = await response.json();
+                this.session.sessionInfo = sessionData.data;
+                console.log('Session created successfully!');
+                console.log('Avatar ID used:', this.config.avatarId);
+                console.log('Session details:', this.session.sessionInfo);
+                
+                // Check if we're getting the right avatar
+                if (sessionData.data.avatar_id && sessionData.data.avatar_id !== this.config.avatarId) {
+                    console.warn('Avatar ID mismatch! Requested:', this.config.avatarId, 'Got:', sessionData.data.avatar_id);
+                }
+            }
+            
+            async startStream() {
+                const startResponse = await fetch(`${this.config.serverUrl}/v1/realtime.start`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "x-api-key": this.config.token
+                    },
+                    body: JSON.stringify({
+                        session_id: this.session.sessionInfo.session_id
+                    })
+                });
+                
+                if (!startResponse.ok) {
+                    const error = await startResponse.json();
+                    throw new Error(error.message || 'Failed to start stream');
+                }
+                
+                const tokenResponse = await fetch(`${this.config.serverUrl}/v1/streaming.create_token`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "x-api-key": this.config.token
+                    },
+                    body: JSON.stringify({
+                        session_id: this.session.sessionInfo.session_id,
+                        paid: true
+                    })
+                });
+                
+                if (!tokenResponse.ok) {
+                    throw new Error('Failed to get session token');
+                }
+                
+                const tokenData = await tokenResponse.json();
+                this.session.sessionToken = tokenData.data.token;
+                
+                console.log('Stream started with token');
+            }
+            
+            async connectToRoom() {
+                // Request microphone permission first
+                try {
+                    const micStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        } 
+                    });
+                    console.log('Microphone access granted');
+                    this.microphoneStream = micStream;
+                } catch (error) {
+                    console.error('Microphone access denied:', error);
+                    alert('Microphone access is required for voice interaction with the avatar');
+                }
+                
+                this.session.room = new LiveKitClient.Room({
+                    adaptiveStream: true,
+                    dynacast: true,
+                    audioCaptureDefaults: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                    },
+                    videoCaptureDefaults: {
+                        resolution: LiveKitClient.VideoPresets.h720.resolution,
+                    },
+                });
+                
+                this.session.mediaStream = new MediaStream();
+                
+                this.session.room.on(LiveKitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                    console.log('Track subscribed:', track.kind, 'from participant:', participant.identity);
+                    
+                    if (track.kind === LiveKitClient.Track.Kind.Video) {
+                        this.session.mediaStream.addTrack(track.mediaStreamTrack);
+                        this.elements.avatarVideo.srcObject = this.session.mediaStream;
+                        // Enable audio output
+                        this.elements.avatarVideo.muted = false;
+                        this.elements.avatarVideo.volume = 1.0;
+                        console.log('Video track connected with audio enabled');
+                    }
+                    
+                    if (track.kind === LiveKitClient.Track.Kind.Audio) {
+                        console.log('🔊 Processing audio track...');
+                        
+                        // Create separate audio element for avatar speech
+                        let avatarAudio = document.getElementById('avatar-audio');
+                        if (!avatarAudio) {
+                            avatarAudio = document.createElement('audio');
+                            avatarAudio.id = 'avatar-audio';
+                            avatarAudio.autoplay = true;
+                            avatarAudio.volume = 1.0;
+                            avatarAudio.controls = true; // Add controls for debugging
+                            avatarAudio.style.position = 'fixed';
+                            avatarAudio.style.top = '10px';
+                            avatarAudio.style.right = '10px';
+                            avatarAudio.style.zIndex = '10000';
+                            document.body.appendChild(avatarAudio);
+                        }
+                        
+                        const audioStream = new MediaStream([track.mediaStreamTrack]);
+                        avatarAudio.srcObject = audioStream;
+                        
+                        // Force play and resume audio context
+                        this.resumeAudioContext().then(() => {
+                            avatarAudio.play().then(() => {
+                                console.log('✅ Audio track connected and playing!');
+                            }).catch(error => {
+                                console.error('❌ Audio play failed:', error);
+                                alert('Click anywhere to enable audio - browser requires user interaction');
+                            });
+                        });
+                    }
+                });
+                
+                this.session.room.on(LiveKitClient.RoomEvent.Connected, () => {
+                    console.log('Connected to LiveKit room');
+                    this.session.isStreaming = true;
+                });
+                
+                await this.session.room.prepareConnection(
+                    this.session.sessionInfo.url,
+                    this.session.sessionInfo.access_token
+                );
+                
+                await this.session.room.connect(
+                    this.session.sessionInfo.url,
+                    this.session.sessionInfo.access_token
+                );
+                
+                // Publish microphone audio so avatar can hear you
+                if (this.microphoneStream) {
+                    try {
+                        await this.session.room.localParticipant.enableCameraAndMicrophone();
+                        console.log('Microphone published - avatar can now hear you');
+                    } catch (error) {
+                        console.error('Failed to publish microphone:', error);
+                        // Try alternative method
+                        try {
+                            const audioTrack = await LiveKitClient.createLocalAudioTrack({
+                                echoCancellation: true,
+                                noiseSuppression: true,
+                                autoGainControl: true,
+                            });
+                            await this.session.room.localParticipant.publishTrack(audioTrack);
+                            console.log('Microphone published via alternative method');
+                        } catch (altError) {
+                            console.error('Alternative microphone publish failed:', altError);
+                        }
+                    }
+                }
+            }
+            
+            async sendMessage() {
+                const message = this.elements.messageInput.value.trim();
+                if (!message || !this.session.isConnected) return;
+                
+                try {
+                    await this.sendToAvatar(message);
+                    this.elements.messageInput.value = '';
+                } catch (error) {
+                    console.error('Failed to send message:', error);
+                    alert('Failed to send message');
+                }
+            }
+            
+            async sendToAvatar(text) {
+                const response = await fetch(`${this.config.serverUrl}/v1/streaming.task`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "x-api-key": this.config.token
+                    },
+                    body: JSON.stringify({
+                        session_id: this.session.sessionInfo.session_id,
+                        text: text,
+                        task_type: "talk"
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to send message');
+                }
+                
+                console.log('Message sent to avatar:', text);
+            }
+            
+            async disconnect() {
+                try {
+                    // Stop microphone stream
+                    if (this.microphoneStream) {
+                        this.microphoneStream.getTracks().forEach(track => track.stop());
+                        this.microphoneStream = null;
+                    }
+                    
+                    // Clean up avatar audio element
+                    const avatarAudio = document.getElementById('avatar-audio');
+                    if (avatarAudio) {
+                        avatarAudio.pause();
+                        avatarAudio.srcObject = null;
+                        avatarAudio.remove();
+                    }
+                    
+                    if (this.session.room) {
+                        await this.session.room.disconnect();
+                    }
+                    
+                    if (this.session.sessionInfo) {
+                        await fetch(`${this.config.serverUrl}/v1/realtime.stop`, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                                "x-api-key": this.config.token
+                            },
+                            body: JSON.stringify({
+                                session_id: this.session.sessionInfo.session_id
+                            })
+                        });
+                    }
+                    
+                    this.session.isConnected = false;
+                    this.session.isStreaming = false;
+                    this.session.sessionInfo = null;
+                    this.session.room = null;
+                    
+                    this.elements.avatarVideo.srcObject = null;
+                    
+                    this.updateStatus('Disconnected', 'disconnected');
+                    this.updateUI(false);
+                    
+                    console.log('Disconnected from avatar stream');
+                    
+                } catch (error) {
+                    console.error('Disconnect error:', error);
+                }
+            }
+            
+            updateUI(connected) {
+                this.elements.connectBtn.disabled = connected;
+                this.elements.disconnectBtn.disabled = !connected;
+                this.elements.sendMessageBtn.disabled = !connected;
+                this.elements.voiceInputBtn.disabled = !connected;
+            }
+            
+            // Resume audio context for browser autoplay policies
+            async resumeAudioContext() {
+                try {
+                    if (!this.audioContext) {
+                        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    
+                    if (this.audioContext.state === 'suspended') {
+                        await this.audioContext.resume();
+                        console.log('🔊 Audio context resumed');
+                    }
+                } catch (error) {
+                    console.error('Failed to resume audio context:', error);
+                }
+            }
+            
+            // Manual audio enabler for user interaction
+            enableAudio() {
+                console.log('🔊 Enabling audio...');
+                this.resumeAudioContext();
+                const avatarAudio = document.getElementById('avatar-audio');
+                if (avatarAudio) {
+                    avatarAudio.play().then(() => {
+                        console.log('✅ Audio enabled successfully!');
+                        const enableBtn = document.getElementById('enable-audio-btn');
+                        if (enableBtn) enableBtn.style.display = 'none';
+                    }).catch(error => {
+                        console.error('❌ Failed to enable audio:', error);
+                        const enableBtn = document.getElementById('enable-audio-btn');
+                        if (enableBtn) enableBtn.style.display = 'inline-block';
+                    });
+                }
+            }
+        }
+        
+        // Debug function to check what's available
+        function debugGlobalScope() {
+            console.log('=== DEBUGGING GLOBAL SCOPE ===');
+            
+            // Check common LiveKit global names
+            const possibleNames = ['LiveKitClient', 'LivekitClient', 'livekit', 'LiveKit', 'LK', 'Room'];
+            possibleNames.forEach(name => {
+                if (typeof window[name] !== 'undefined') {
+                    console.log(`Found global: ${name}`, typeof window[name]);
+                    if (typeof window[name] === 'object') {
+                        console.log(`${name} keys:`, Object.keys(window[name]));
+                        // If this is LivekitClient (lowercase k), fix the global reference
+                        if (name === 'LivekitClient' && typeof window.LiveKitClient === 'undefined') {
+                            console.log('Fixing global reference: LivekitClient -> LiveKitClient');
+                            window.LiveKitClient = window.LivekitClient;
+                        }
+                    }
+                }
+            });
+            
+            // List all globals that might contain "live" or "kit"
+            const allGlobals = Object.keys(window);
+            const relevantGlobals = allGlobals.filter(key => 
+                key.toLowerCase().includes('live') || 
+                key.toLowerCase().includes('kit') ||
+                key.toLowerCase().includes('room') ||
+                key.toLowerCase().includes('client')
+            );
+            console.log('Potentially relevant globals:', relevantGlobals);
+            
+            // Check if any scripts were loaded
+            const scripts = Array.from(document.querySelectorAll('script[src*="livekit"]'));
+            console.log('LiveKit scripts found:', scripts.map(s => ({ src: s.src, loaded: !s.error })));
+        }
+
+        // Initialize the desktop app
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Wait a bit for scripts to load, then debug
+            setTimeout(debugGlobalScope, 2000);
+            
+            try {
+                await waitForLiveKitClient();
+                window.desktopAvatarApp = new DesktopAvatarApp();
+                console.log('Desktop Avatar App initialized successfully');
+            } catch (error) {
+                console.error('Failed to initialize app:', error);
+                console.log('Running debug to see what\'s available...');
+                debugGlobalScope();
+                document.getElementById('status').textContent = 'Failed to load LiveKit SDK - Check console for details';
+                document.getElementById('status').className = 'status disconnected';
+            }
+        });
+    </script>
+</body>
+</html> 
