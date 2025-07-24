@@ -173,12 +173,20 @@
 </head>
 <body>
     <div class="container">
-        <h1>🤖 Desktop Avatar Test - No AR</h1>
+        <h1>🧠 Doppel - Caleb Weintraub's Digital Alter Ego</h1>
+        
+        <div class="info-panel" style="background: rgba(0, 50, 100, 0.3); padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid rgba(0, 255, 255, 0.3);">
+            <p style="margin: 0; text-align: center; font-style: italic; color: #00ffff;">
+                👋 Meet Doppel, Caleb Weintraub's AI doppelganger beaming in from the depths of a neural network. 
+                <br/>🌊 The connection travels through algorithmic waves, so please give him a moment to process and respond.
+                <br/>🎤 <strong>Voice Tip:</strong> Click the voice button each time you want to speak (browser security requirement).
+            </p>
+        </div>
         
         <div class="control-panel">
             <h3>Connection Status</h3>
             <div id="status" class="status disconnected">Disconnected</div>
-            <button id="connect-btn" class="btn">🚀 Connect Caleb's Avatar</button>
+            <button id="connect-btn" class="btn">🚀 Connect to Doppel</button>
             <button id="disconnect-btn" class="btn" disabled>Disconnect</button>
             <button id="enable-audio-btn" class="btn" onclick="window.desktopAvatarApp?.enableAudio()" style="display:none;">🔊 Enable Audio</button>
         </div>
@@ -191,10 +199,16 @@
         </div>
 
         <div class="chat-area">
-            <h3>Chat with Avatar</h3>
-            <textarea id="message-input" class="chat-input" rows="3" placeholder="Type your message to Caleb..."></textarea>
-            <button id="send-message-btn" class="btn" disabled>Send Message</button>
-            <button id="voice-input-btn" class="btn" disabled>🎤 Voice Input</button>
+            <h3>Chat with Doppel</h3>
+            <textarea id="message-input" class="chat-input" rows="3" placeholder="Type your message to Doppel, or use voice input below..."></textarea>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <button id="send-message-btn" class="btn" disabled>📝 Send Text</button>
+                <button id="voice-input-btn" class="btn" disabled>🎤 Press to Speak</button>
+                <div id="voice-status" style="color: #00ffff; font-size: 12px; font-style: italic;"></div>
+            </div>
+            <div style="margin-top: 10px; font-size: 12px; color: #888; text-align: center;">
+                💡 Voice Input: Click "Press to Speak" → Talk → Your message auto-sends when you stop speaking
+            </div>
         </div>
     </div>
 
@@ -300,14 +314,19 @@
                     messageInput: document.getElementById('message-input'),
                     sendMessageBtn: document.getElementById('send-message-btn'),
                     voiceInputBtn: document.getElementById('voice-input-btn'),
-                    avatarVideo: document.getElementById('avatar-video')
+                    avatarVideo: document.getElementById('avatar-video'),
+                    voiceStatus: document.getElementById('voice-status')
                 };
+                
+                this.recognition = null;
+                this.isListening = false;
                 
                 this.init();
             }
             
             init() {
                 this.bindEvents();
+                this.setupSpeechRecognition();
                 console.log('Desktop Avatar App initialized - No AR');
             }
             
@@ -315,6 +334,7 @@
                 this.elements.connectBtn.addEventListener('click', () => this.connect());
                 this.elements.disconnectBtn.addEventListener('click', () => this.disconnect());
                 this.elements.sendMessageBtn.addEventListener('click', () => this.sendMessage());
+                this.elements.voiceInputBtn.addEventListener('click', () => this.toggleVoiceInput());
                 
                 this.elements.messageInput.addEventListener('keypress', (e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
@@ -340,6 +360,8 @@
                     // Ensure LiveKitClient is available
                     await waitForLiveKitClient();
                     
+                    // Correct flow: token → new → start
+                    await this.createSessionToken();
                     await this.createSession();
                     await this.startStream();
                     await this.connectToRoom();
@@ -359,14 +381,36 @@
                 }
             }
             
-            async createSession() {
-                const response = await fetch(`${this.config.serverUrl}/v1/realtime.new`, {
+            async createSessionToken() {
+                console.log('🔑 Creating session token...');
+                const response = await fetch(`${this.config.serverUrl}/v1/streaming.create_token`, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
                         "x-api-key": this.config.token
+                    }
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to create session token');
+                }
+                
+                const tokenData = await response.json();
+                this.session.sessionToken = tokenData.data.token;
+                console.log('✅ Session token created');
+            }
+            
+            async createSession() {
+                console.log('📝 Creating session with Bearer token...');
+                const response = await fetch(`${this.config.serverUrl}/v1/streaming.new`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${this.session.sessionToken}`
                     },
                     body: JSON.stringify({
+                        version: "v2",
                         avatar_id: this.config.avatarId,
                         voice: {
                             voice_id: "3da51ff105b54d559eda2815af07177a"
@@ -386,6 +430,7 @@
                 console.log('Session created successfully!');
                 console.log('Avatar ID used:', this.config.avatarId);
                 console.log('Session details:', this.session.sessionInfo);
+                console.log('Full session response:', sessionData);
                 
                 // Check if we're getting the right avatar
                 if (sessionData.data.avatar_id && sessionData.data.avatar_id !== this.config.avatarId) {
@@ -394,60 +439,43 @@
             }
             
             async startStream() {
-                const startResponse = await fetch(`${this.config.serverUrl}/v1/realtime.start`, {
+                console.log('🚀 Starting stream with session ID:', this.session.sessionInfo.session_id);
+                console.log('Available session fields:', Object.keys(this.session.sessionInfo));
+                
+                // Use correct endpoint and parameters based on forum post
+                const startParams = {
+                    session_id: this.session.sessionInfo.session_id
+                };
+                
+                console.log('Start params:', startParams);
+                
+                const startResponse = await fetch(`${this.config.serverUrl}/v1/streaming.start`, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
                         "x-api-key": this.config.token
                     },
-                    body: JSON.stringify({
-                        session_id: this.session.sessionInfo.session_id
-                    })
+                    body: JSON.stringify(startParams)
                 });
                 
                 if (!startResponse.ok) {
-                    const error = await startResponse.json();
-                    throw new Error(error.message || 'Failed to start stream');
+                    console.error('Start response status:', startResponse.status);
+                    const errorText = await startResponse.text();
+                    console.error('Start error response:', errorText);
+                    
+                    try {
+                        const error = JSON.parse(errorText);
+                        throw new Error(error.message || `Failed to start stream: ${startResponse.status}`);
+                    } catch {
+                        throw new Error(`Failed to start stream: ${startResponse.status} - ${errorText}`);
+                    }
                 }
                 
-                const tokenResponse = await fetch(`${this.config.serverUrl}/v1/streaming.create_token`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "x-api-key": this.config.token
-                    },
-                    body: JSON.stringify({
-                        session_id: this.session.sessionInfo.session_id,
-                        paid: true
-                    })
-                });
-                
-                if (!tokenResponse.ok) {
-                    throw new Error('Failed to get session token');
-                }
-                
-                const tokenData = await tokenResponse.json();
-                this.session.sessionToken = tokenData.data.token;
-                
-                console.log('Stream started with token');
+                console.log('✅ Stream started successfully');
             }
             
             async connectToRoom() {
-                // Request microphone permission first
-                try {
-                    const micStream = await navigator.mediaDevices.getUserMedia({ 
-                        audio: {
-                            echoCancellation: true,
-                            noiseSuppression: true,
-                            autoGainControl: true
-                        } 
-                    });
-                    console.log('Microphone access granted');
-                    this.microphoneStream = micStream;
-                } catch (error) {
-                    console.error('Microphone access denied:', error);
-                    alert('Microphone access is required for voice interaction with the avatar');
-                }
+                console.log('🎧 Connecting to LiveKit room...');
                 
                 this.session.room = new LiveKitClient.Room({
                     adaptiveStream: true,
@@ -525,25 +553,25 @@
                 );
                 
                 // Publish microphone audio so avatar can hear you
-                if (this.microphoneStream) {
-                    try {
-                        await this.session.room.localParticipant.enableCameraAndMicrophone();
-                        console.log('Microphone published - avatar can now hear you');
-                    } catch (error) {
-                        console.error('Failed to publish microphone:', error);
-                        // Try alternative method
-                        try {
-                            const audioTrack = await LiveKitClient.createLocalAudioTrack({
-                                echoCancellation: true,
-                                noiseSuppression: true,
-                                autoGainControl: true,
-                            });
-                            await this.session.room.localParticipant.publishTrack(audioTrack);
-                            console.log('Microphone published via alternative method');
-                        } catch (altError) {
-                            console.error('Alternative microphone publish failed:', altError);
-                        }
-                    }
+                try {
+                    console.log('🎤 Publishing microphone to LiveKit room...');
+                    
+                    // Create and publish local audio track
+                    const audioTrack = await LiveKitClient.createLocalAudioTrack({
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                    });
+                    
+                    await this.session.room.localParticipant.publishTrack(audioTrack);
+                    console.log('✅ Microphone published - avatar can now hear you!');
+                    
+                    // Store the audio track for later cleanup
+                    this.localAudioTrack = audioTrack;
+                    
+                } catch (error) {
+                    console.error('❌ Failed to publish microphone:', error);
+                    alert('Failed to connect microphone. The avatar may not be able to hear you.');
                 }
             }
             
@@ -584,7 +612,13 @@
             
             async disconnect() {
                 try {
-                    // Stop microphone stream
+                    // Clean up local audio track
+                    if (this.localAudioTrack) {
+                        this.localAudioTrack.stop();
+                        this.localAudioTrack = null;
+                    }
+                    
+                    // Stop microphone stream (if any)
                     if (this.microphoneStream) {
                         this.microphoneStream.getTracks().forEach(track => track.stop());
                         this.microphoneStream = null;
@@ -637,6 +671,105 @@
                 this.elements.disconnectBtn.disabled = !connected;
                 this.elements.sendMessageBtn.disabled = !connected;
                 this.elements.voiceInputBtn.disabled = !connected;
+            }
+            
+            updateVoiceStatus(message) {
+                if (this.elements.voiceStatus) {
+                    this.elements.voiceStatus.textContent = message;
+                }
+            }
+            
+            setupSpeechRecognition() {
+                console.log('🎤 Setting up speech recognition...');
+                
+                if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    this.recognition = new SpeechRecognition();
+                    
+                    this.recognition.continuous = false;
+                    this.recognition.interimResults = false;
+                    this.recognition.lang = 'en-US';
+                    
+                    this.recognition.onresult = (event) => {
+                        const transcript = event.results[0][0].transcript;
+                        console.log('🎤 Speech recognized:', transcript);
+                        this.elements.messageInput.value = transcript;
+                        this.updateVoiceStatus('✅ Sending: "' + transcript + '"');
+                        
+                        // Small delay for visual feedback, then send
+                        setTimeout(() => {
+                            this.sendMessage();
+                            this.updateVoiceStatus('🌊 Message sent, waiting for Doppel to respond...');
+                            setTimeout(() => this.updateVoiceStatus(''), 3000);
+                        }, 500);
+                    };
+                    
+                    this.recognition.onstart = () => {
+                        console.log('🎤 Speech recognition started');
+                        this.isListening = true;
+                        this.elements.voiceInputBtn.textContent = '🛑 Listening...';
+                        this.elements.voiceInputBtn.style.background = 'linear-gradient(45deg, #ff4444, #ff6666)';
+                        this.updateVoiceStatus('🎤 Listening... Speak now!');
+                    };
+                    
+                    this.recognition.onend = () => {
+                        console.log('🎤 Speech recognition ended');
+                        this.isListening = false;
+                        this.elements.voiceInputBtn.textContent = '🎤 Press to Speak';
+                        this.elements.voiceInputBtn.style.background = 'linear-gradient(45deg, #00ffff, #0080ff)';
+                        this.updateVoiceStatus('');
+                    };
+                    
+                    this.recognition.onerror = (event) => {
+                        console.error('🎤 Speech recognition error:', event.error);
+                        this.isListening = false;
+                        this.elements.voiceInputBtn.textContent = '🎤 Press to Speak';
+                        this.elements.voiceInputBtn.style.background = 'linear-gradient(45deg, #00ffff, #0080ff)';
+                        
+                        if (event.error === 'not-allowed') {
+                            this.updateVoiceStatus('❌ Microphone access denied');
+                            alert('Microphone access denied. Please allow microphone access and try again.');
+                        } else if (event.error === 'no-speech') {
+                            this.updateVoiceStatus('🤫 No speech detected, try again');
+                        } else {
+                            this.updateVoiceStatus('❌ Voice recognition error');
+                        }
+                        
+                        setTimeout(() => this.updateVoiceStatus(''), 3000);
+                    };
+                    
+                    console.log('✅ Speech recognition ready');
+                } else {
+                    console.warn('🎤 Speech recognition not supported in this browser');
+                    this.elements.voiceInputBtn.style.display = 'none';
+                }
+            }
+            
+            toggleVoiceInput() {
+                console.log('🎤 Voice input button clicked');
+                
+                if (!this.recognition) {
+                    alert('Speech recognition is not supported in this browser');
+                    return;
+                }
+                
+                if (!this.session.isConnected) {
+                    alert('Please connect to the avatar first');
+                    return;
+                }
+                
+                if (this.isListening) {
+                    console.log('🛑 Stopping speech recognition');
+                    this.recognition.stop();
+                } else {
+                    console.log('🎤 Starting speech recognition');
+                    try {
+                        this.recognition.start();
+                    } catch (error) {
+                        console.error('Failed to start speech recognition:', error);
+                        alert('Failed to start voice input. Please try again.');
+                    }
+                }
             }
             
             // Resume audio context for browser autoplay policies

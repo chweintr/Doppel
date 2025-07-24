@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Streaming Avatar - Caleb Weintraub</title>
+    <title>Doppel AR - Caleb Weintraub's Digital Alter Ego</title>
     
     <!-- A-Frame and AR.js -->
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
@@ -323,9 +323,18 @@
 
     <!-- Main App Content (Hidden until password) -->
     <div id="main-app" class="main-app">
+        <!-- Info Panel -->
+        <div class="info-panel" style="background: rgba(0, 50, 100, 0.4); padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid rgba(0, 255, 255, 0.3); max-width: 300px;">
+            <p style="margin: 0; text-align: center; font-style: italic; color: #00ffff; font-size: 13px;">
+                👋 Meet <strong>Doppel</strong>, Caleb Weintraub's AI doppelganger beaming in from the depths of a neural network. 
+                <br/><br/>🌊 Point your camera at the Hiro marker below to see him in AR! The connection travels through algorithmic waves, so please give him a moment to process and respond.
+                <br/><br/>🎤 <strong>Voice Tip:</strong> Click the voice button each time you want to speak.
+            </p>
+        </div>
+
         <!-- Control Panel -->
         <div class="control-panel">
-        <h3>🤖 Caleb AI Avatar</h3>
+        <h3>🧠 Doppel AR Control</h3>
         
         <div id="status" class="status disconnected">
             Disconnected
@@ -336,16 +345,17 @@
             <input type="password" id="api-token" placeholder="Enter your HeyGen API token" value="MjNlM2Q1ZmVkY2E2NDNmOGIxYzMzMDgzYzNhZmYyZTQtMTczMDU4NDk0Nw==">
         </div>
 
-        <button id="connect-btn" class="btn">🚀 Connect Caleb's Avatar</button>
+        <button id="connect-btn" class="btn">🚀 Connect to Doppel</button>
         <button id="disconnect-btn" class="btn" disabled>Disconnect</button>
 
         <div class="input-group">
-            <label for="message-input">Chat with Avatar:</label>
-            <textarea id="message-input" rows="3" placeholder="Ask me about AI, art, philosophy, or anything else..."></textarea>
+            <label for="message-input">Chat with Doppel:</label>
+            <textarea id="message-input" rows="3" placeholder="Ask Doppel about AI, art, philosophy, or anything else..."></textarea>
         </div>
 
-        <button id="send-message-btn" class="btn" disabled>Send Message</button>
-        <button id="voice-input-btn" class="btn" disabled>🎤 Voice Input</button>
+        <button id="send-message-btn" class="btn" disabled>📝 Send Text</button>
+        <button id="voice-input-btn" class="btn" disabled>🎤 Press to Speak</button>
+        <div id="voice-status" style="color: #00ffff; font-size: 12px; font-style: italic; margin-top: 5px;"></div>
 
         <div class="input-group">
             <label>Quick Prompts:</label>

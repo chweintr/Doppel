@@ -31,7 +31,8 @@ class ARAvatarApp {
             avatarVideo: document.getElementById('avatar-video'),
             avatarCanvas: document.getElementById('avatar-canvas'),
             avatarTexture: document.getElementById('avatar-texture'),
-            loadingOverlay: document.getElementById('loading-overlay')
+            loadingOverlay: document.getElementById('loading-overlay'),
+            voiceStatus: document.getElementById('voice-status')
         };
         
         this.audioLevels = {
@@ -90,6 +91,12 @@ class ARAvatarApp {
         this.elements.status.className = `status ${className}`;
     }
     
+    updateVoiceStatus(message) {
+        if (this.elements.voiceStatus) {
+            this.elements.voiceStatus.textContent = message;
+        }
+    }
+    
     // Monitor audio levels for visual feedback
     startAudioMonitoring() {
         if (!this.microphoneStream) return;
@@ -134,6 +141,9 @@ class ARAvatarApp {
         this.updateStatus('Connecting...', 'connecting');
         
         try {
+            // Correct flow: token → new → start
+            await this.createSessionToken();
+            
             // Create new streaming session
             await this.createSession();
             
@@ -166,15 +176,37 @@ class ARAvatarApp {
         }
     }
     
-    async createSession() {
-        // Create session first (correct official flow)
-        const response = await fetch(`${this.config.serverUrl}/v1/realtime.new`, {
+    async createSessionToken() {
+        console.log('🔑 Creating session token...');
+        const response = await fetch(`${this.config.serverUrl}/v1/streaming.create_token`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
                 "x-api-key": this.config.token
+            }
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to create session token');
+        }
+        
+        const tokenData = await response.json();
+        this.session.sessionToken = tokenData.data.token;
+        console.log('✅ Session token created');
+    }
+    
+    async createSession() {
+        console.log('📝 Creating session with Bearer token...');
+        // Create session first (correct official flow)
+        const response = await fetch(`${this.config.serverUrl}/v1/streaming.new`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${this.session.sessionToken}`
             },
             body: JSON.stringify({
+                version: "v2",
                 avatar_id: this.config.avatarId,
                 voice: {
                     voice_id: "3da51ff105b54d559eda2815af07177a"
@@ -194,6 +226,7 @@ class ARAvatarApp {
         console.log('Session created successfully!');
         console.log('Avatar ID used:', this.config.avatarId);
         console.log('Session details:', this.session.sessionInfo);
+        console.log('Full session response:', sessionData);
         
         // Check if we're getting the right avatar
         if (sessionData.data.avatar_id && sessionData.data.avatar_id !== this.config.avatarId) {
@@ -202,44 +235,40 @@ class ARAvatarApp {
     }
     
     async startStream() {
+        console.log('🚀 Starting stream with session ID:', this.session.sessionInfo.session_id);
+        console.log('Available session fields:', Object.keys(this.session.sessionInfo));
+        
+        // Use correct endpoint and parameters based on forum post
+        const startParams = {
+            session_id: this.session.sessionInfo.session_id
+        };
+        
+        console.log('Start params:', startParams);
+        
         // Start the session
-        const startResponse = await fetch(`${this.config.serverUrl}/v1/realtime.start`, {
+        const startResponse = await fetch(`${this.config.serverUrl}/v1/streaming.start`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
                 "x-api-key": this.config.token
             },
-            body: JSON.stringify({
-                session_id: this.session.sessionInfo.session_id
-            })
+            body: JSON.stringify(startParams)
         });
         
         if (!startResponse.ok) {
-            const error = await startResponse.json();
-            throw new Error(error.message || 'Failed to start stream');
+            console.error('Start response status:', startResponse.status);
+            const errorText = await startResponse.text();
+            console.error('Start error response:', errorText);
+            
+            try {
+                const error = JSON.parse(errorText);
+                throw new Error(error.message || `Failed to start stream: ${startResponse.status}`);
+            } catch {
+                throw new Error(`Failed to start stream: ${startResponse.status} - ${errorText}`);
+            }
         }
         
-        // Create session token after starting
-        const tokenResponse = await fetch(`${this.config.serverUrl}/v1/streaming.create_token`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "x-api-key": this.config.token
-            },
-            body: JSON.stringify({
-                session_id: this.session.sessionInfo.session_id,
-                paid: true
-            })
-        });
-        
-        if (!tokenResponse.ok) {
-            throw new Error('Failed to get session token');
-        }
-        
-        const tokenData = await tokenResponse.json();
-        this.session.sessionToken = tokenData.data.token;
-        
-        console.log('Stream started with token');
+        console.log('✅ Stream started successfully');
     }
     
     async connectToRoom() {
@@ -248,21 +277,7 @@ class ARAvatarApp {
             throw new Error('LiveKitClient is not available. Please ensure the LiveKit SDK is loaded.');
         }
         
-        // Request microphone permission first
-        try {
-            const micStream = await navigator.mediaDevices.getUserMedia({ 
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                } 
-            });
-            console.log('Microphone access granted');
-            this.microphoneStream = micStream;
-        } catch (error) {
-            console.error('Microphone access denied:', error);
-            alert('Microphone access is required for voice interaction with the avatar');
-        }
+        console.log('🎧 Connecting to LiveKit room...');
         
         // Create LiveKit room with proper audio configuration
         this.session.room = new LiveKitClient.Room({
@@ -341,25 +356,25 @@ class ARAvatarApp {
         );
         
         // Publish microphone audio so avatar can hear you
-        if (this.microphoneStream) {
-            try {
-                await this.session.room.localParticipant.enableCameraAndMicrophone();
-                console.log('Microphone published - avatar can now hear you');
-            } catch (error) {
-                console.error('Failed to publish microphone:', error);
-                // Try alternative method
-                try {
-                    const audioTrack = await LiveKitClient.createLocalAudioTrack({
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true,
-                    });
-                    await this.session.room.localParticipant.publishTrack(audioTrack);
-                    console.log('Microphone published via alternative method');
-                } catch (altError) {
-                    console.error('Alternative microphone publish failed:', altError);
-                }
-            }
+        try {
+            console.log('🎤 Publishing microphone to LiveKit room...');
+            
+            // Create and publish local audio track
+            const audioTrack = await LiveKitClient.createLocalAudioTrack({
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+            });
+            
+            await this.session.room.localParticipant.publishTrack(audioTrack);
+            console.log('✅ Microphone published - avatar can now hear you!');
+            
+            // Store the audio track for later cleanup
+            this.localAudioTrack = audioTrack;
+            
+        } catch (error) {
+            console.error('❌ Failed to publish microphone:', error);
+            alert('Failed to connect microphone. The avatar may not be able to hear you.');
         }
     }
     
@@ -457,21 +472,50 @@ class ARAvatarApp {
             
             this.recognition.onresult = (event) => {
                 const transcript = event.results[0][0].transcript;
+                console.log('🎤 Speech recognized:', transcript);
                 this.elements.messageInput.value = transcript;
-                console.log('Speech recognized:', transcript);
+                this.updateVoiceStatus('✅ Sending: "' + transcript + '"');
+                
+                // Small delay for visual feedback, then send
+                setTimeout(() => {
+                    this.sendMessage();
+                    this.updateVoiceStatus('🌊 Message sent, waiting for Doppel to respond...');
+                    setTimeout(() => this.updateVoiceStatus(''), 3000);
+                }, 500);
+            };
+            
+            this.recognition.onstart = () => {
+                console.log('🎤 Speech recognition started');
+                this.isListening = true;
+                this.elements.voiceInputBtn.textContent = '🛑 Listening...';
+                this.elements.voiceInputBtn.style.background = 'linear-gradient(45deg, #ff4444, #ff6666)';
+                this.updateVoiceStatus('🎤 Listening... Speak now!');
             };
             
             this.recognition.onend = () => {
+                console.log('🎤 Speech recognition ended');
                 this.isListening = false;
-                this.elements.voiceInputBtn.textContent = '🎤 Voice Input';
+                this.elements.voiceInputBtn.textContent = '🎤 Press to Speak';
                 this.elements.voiceInputBtn.style.background = 'linear-gradient(45deg, #00ffff, #0080ff)';
+                this.updateVoiceStatus('');
             };
             
             this.recognition.onerror = (event) => {
-                console.error('Speech recognition error:', event.error);
+                console.error('🎤 Speech recognition error:', event.error);
                 this.isListening = false;
-                this.elements.voiceInputBtn.textContent = '🎤 Voice Input';
+                this.elements.voiceInputBtn.textContent = '🎤 Press to Speak';
                 this.elements.voiceInputBtn.style.background = 'linear-gradient(45deg, #00ffff, #0080ff)';
+                
+                if (event.error === 'not-allowed') {
+                    this.updateVoiceStatus('❌ Microphone access denied');
+                    alert('Microphone access denied. Please allow microphone access and try again.');
+                } else if (event.error === 'no-speech') {
+                    this.updateVoiceStatus('🤫 No speech detected, try again');
+                } else {
+                    this.updateVoiceStatus('❌ Voice recognition error');
+                }
+                
+                setTimeout(() => this.updateVoiceStatus(''), 3000);
             };
         } else {
             console.warn('Speech recognition not supported');
@@ -494,7 +538,13 @@ class ARAvatarApp {
     
     async disconnect() {
         try {
-            // Stop microphone stream
+            // Clean up local audio track
+            if (this.localAudioTrack) {
+                this.localAudioTrack.stop();
+                this.localAudioTrack = null;
+            }
+            
+            // Stop microphone stream (if any)
             if (this.microphoneStream) {
                 this.microphoneStream.getTracks().forEach(track => track.stop());
                 this.microphoneStream = null;
